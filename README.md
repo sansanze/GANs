@@ -1,4 +1,4 @@
-This repository contains script to tune GANs and price financial options using Generative Adversarial Networks integrated into a Quasi-Monte Carlo Simulation.
+This repository contains scripts to tune GANs and price financial options using Generative Adversarial Networks integrated into a Quasi-Monte Carlo Simulation.
 
 There are 3 scripts to train an LSTM-GAN, LSTM-TCN-GAN, and Wasserstein GAN with Gradient Penalty respectively. Starting parameters can be chosen to refine the tuning process of the GANs.
 
