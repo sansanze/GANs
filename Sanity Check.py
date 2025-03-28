@@ -43,7 +43,7 @@ hid_dim = 50
 generator = WasGenerator(in_dim=in_dim, out_dim=1, n_layers=n_layers, hidden_dim=hid_dim).to(device)
 
 # Load the Generator dictionary
-generator.load_state_dict(torch.load("BEST W Gen BHP", map_location=device))
+generator.load_state_dict(torch.load("BEST W-GAN-GP Gen BHP", map_location=device))
 # Set the generator in evaluation mode
 generator.eval()
 

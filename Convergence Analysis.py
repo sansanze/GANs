@@ -175,7 +175,7 @@ def generate_asset_price(S, v, r, dt, N, length, Sim="MC", device=None, generato
             )
         return price_paths
     elif Sim == "QMC":
-        h_qrng = qp.Halton(length - 1, randomize='QRNG', generalize=True, seed=random.randint(1, 1000))
+        h_qrng = qp.Halton(length - 1, randomize='QRNG', seed=random.randint(1, 1000))
         points = stats.norm.ppf(h_qrng.gen_samples(N))
         price_paths = np.zeros((N, length))
         price_paths[:, 0] = S
@@ -187,7 +187,7 @@ def generate_asset_price(S, v, r, dt, N, length, Sim="MC", device=None, generato
             return_paths[:, i - 1] = np.exp((r - v ** 2 / 2) * dt + v * points[:, i - 1] * np.sqrt(dt)) - 1
 
         return price_paths
-    elif Sim == "GAN":
+    elif Sim == "GAN-MC":
         price_paths = np.zeros((N, length))
 
         # Set initial prices
@@ -203,7 +203,7 @@ def generate_asset_price(S, v, r, dt, N, length, Sim="MC", device=None, generato
 
     elif Sim == "GAN-QMC":
 
-        h_qrng = qp.Halton(length - 1, randomize='QRNG', generalize=True, seed=random.randint(1, 1000))
+        h_qrng = qp.Halton(length - 1, randomize='QRNG', seed=random.randint(1, 1000))
         points = np.floor(h_qrng.gen_samples(N) * len(empirical_distribution)).astype(int)
         samples = empirical_distribution[points]
 
@@ -283,7 +283,7 @@ def main():
     in_dim = 200
     n_layers = 2
     hid_dim = 50
-    name = "BEST W Gen BHP"
+    name = "BEST W-GAN-GP Gen BHP"
     generator = WasGenerator(in_dim=in_dim, out_dim=1, n_layers=n_layers, hidden_dim=hid_dim).to(device)
     generator.load_state_dict(torch.load(name, map_location=device))
 
@@ -342,7 +342,7 @@ def main():
         qmc_price_data = qmc_price_data
 
         # Time GAN simulation
-        gan_price_paths = generate_asset_price(S_0, v, r, 1, N, T, "GAN", device, generator)
+        gan_price_paths = generate_asset_price(S_0, v, r, 1, N, T, "GAN-MC", device, generator)
         option_instance_gan = Option(option_type, option_sort, gan_price_paths, strike, r, T, market_price, B)
         gan_price_data = option_instance_gan.price()[0]
         gan_price_data = gan_price_data
