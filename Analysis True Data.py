@@ -10,7 +10,7 @@ import scipy.stats
 np.seterr(divide='ignore', invalid='ignore')
 
 # Fetch true data BHP
-index_data = yf.download('BHP', start='1980-01-01', end='2023-01-01')['Adj Close'].values
+index_data = yf.download('BHP', start='1980-01-01', end='2023-01-01')['Close'].values
 log_returns = np.log(index_data[1:] / index_data[:-1])
 
 # Create a subplot with 2 rows and 4 columns

@@ -19,6 +19,7 @@ import torch.nn as nn
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from scipy.stats import gaussian_kde
+from scipy.stats import qmc
 from statsmodels.nonparametric.kde import KDEUnivariate
 
 
@@ -78,7 +79,7 @@ class LSTMGenerator(nn.Module):
 
 
 def LoadIndexData(stock, begin_date, end_date):
-    index_data = yf.download(stock, start=begin_date, end=end_date)['Adj Close'].to_numpy()  # .values.reshape(-1, 1, 1)
+    index_data = yf.download(stock, start=begin_date, end=end_date)['Close'].to_numpy()  # .values.reshape(-1, 1, 1)
     log_returns = np.log(index_data[1:] / index_data[:-1])
     S_0 = index_data[-1]
     mu = log_returns.mean()
@@ -103,7 +104,7 @@ def generate_asset_price(S, v, r, dt, N, length, Sim="MC", device=None, generato
             )
         return price_paths
     elif Sim == "QMC":
-        h_qrng = qp.Halton(length - 1, randomize='QRNG', generalize=True, seed=random.randint(1, 1000))
+        h_qrng = qp.Halton(length - 1, randomize='QRNG', seed=random.randint(1, 1000))
         points = stats.norm.ppf(h_qrng.gen_samples(N))
         price_paths = np.zeros((N, length))
         price_paths[:, 0] = S
@@ -115,7 +116,7 @@ def generate_asset_price(S, v, r, dt, N, length, Sim="MC", device=None, generato
 
         return price_paths
 
-    elif Sim == "GAN":
+    elif Sim == "GAN-MC":
         price_paths = np.zeros((N, length))
 
         # Set initial prices
@@ -130,9 +131,11 @@ def generate_asset_price(S, v, r, dt, N, length, Sim="MC", device=None, generato
 
         return price_paths
 
-    elif Sim == "GAN-QMC":
-        h_qrng = qp.Halton(length - 1, randomize='QRNG', generalize=True, seed=random.randint(1, 1000))
-        points = np.floor(h_qrng.gen_samples(N) * len(empirical_distribution)).astype(int)
+    elif Sim == "GAN-LHS":
+        # 使用拉丁超立方体抽样
+        sampler = qmc.LatinHypercube(d=length - 1, seed=random.randint(1, 1000))
+        samples = sampler.random(N)
+        points = np.floor(samples * len(empirical_distribution)).astype(int)
         samples = empirical_distribution[points]
 
         price_paths = np.zeros((N, length))
@@ -194,7 +197,7 @@ def get_option_data(file_name):
 
 def main():
     # Get the option data
-    file_name = "Sensitivity Analysis Volatility.xlsx"
+    file_name = "CBA Option prices.xlsx"
     option_contracts = get_option_data(file_name)
     print(option_contracts)
 
@@ -205,10 +208,10 @@ def main():
     ngpu = 1
     device = torch.device("cuda:0" if (torch.cuda.is_available() and ngpu > 0) else "cpu")
 
-    in_dim = 200
-    n_layers = 2
-    hid_dim = 50
-    name = "BEST W Gen BHP"
+    in_dim = 98
+    n_layers = 1
+    hid_dim = 70
+    name = "BEST W-GAN-GP Gen CBA"
     generator = WasGenerator(in_dim=in_dim, out_dim=1, n_layers=n_layers, hidden_dim=hid_dim).to(device)
     generator.load_state_dict(torch.load(name, map_location=device))
 
@@ -255,48 +258,18 @@ def main():
         #     v = convert_volatility(v)
 
         T = int(T/dt)
-        # Time MC simulation
-        mc_start_time = timeit.default_timer()
-        mc_price_paths = generate_asset_price(S_0, v, r, dt, N, T,  "MC")
-        option_instance_mc = Option(option_type, option_sort, mc_price_paths, strike, r, T, market_price, B)
-        mc_price_data = option_instance_mc.price()[0]
-        mc_elapsed = timeit.default_timer() - mc_start_time
-        mc_price_data = ['MC'] + mc_price_data + [S_0, v, mc_elapsed]
+        for sim_type in ["MC", "QMC", "GAN-MC", "GAN-LHS"]:
+            start_time = timeit.default_timer()
+            price_paths = generate_asset_price(S_0, v, r, dt, N, T, sim_type, device, generator)
+            option_instance = Option(option_type, option_sort, price_paths, strike, r, T, market_price, B)
+            price_data = option_instance.price()[0]
+            elapsed = timeit.default_timer() - start_time
+            results.append([sim_type] + price_data + [S_0, v, elapsed])
 
-        # Time QMC simulation
-        qmc_start_time = timeit.default_timer()
-        qmc_price_paths = generate_asset_price(S_0, v, r, dt, N, T, "QMC")
-        option_instance_qmc = Option(option_type, option_sort, qmc_price_paths, strike, r, T, market_price, B)
-        qmc_price_data = option_instance_qmc.price()[0]
-        qmc_elapsed = timeit.default_timer() - qmc_start_time
-        qmc_price_data = ['QMC'] + qmc_price_data + [S_0, v, qmc_elapsed]
-
-        # Time GAN simulation
-        gan_start_time = timeit.default_timer()
-        gan_price_paths = generate_asset_price(S_0, v, r, dt, N, T, "GAN", device, generator)
-        option_instance_gan = Option(option_type, option_sort, gan_price_paths, strike, r, T, market_price, B)
-        gan_price_data = option_instance_gan.price()[0]
-        gan_elapsed = timeit.default_timer() - gan_start_time
-        gan_price_data = ['GAN-MC'] + gan_price_data + [S_0, v, gan_elapsed]
-
-        # Time GAN-QMC simulation
-        gan_qmc_start_time = timeit.default_timer()
-        gan_qmc_price_paths = generate_asset_price(S_0, v, r, dt, N, T, "GAN-QMC", device, generator)
-        option_instance_gan_qmc = Option(option_type, option_sort, gan_qmc_price_paths, strike, r, T, market_price, B)
-        gan_qmc_price_data = option_instance_gan_qmc.price()[0]
-        gan_qmc_elapsed = timeit.default_timer() - gan_qmc_start_time
-        gan_qmc_price_data = ['GAN-QMC'] + gan_qmc_price_data + [S_0, v, gan_qmc_elapsed]
-
-        # Save output of all simulations
-        results.append(mc_price_data)
-        results.append(qmc_price_data)
-        results.append(gan_price_data)
-        results.append(gan_qmc_price_data)
-
-    output_file_path = "W-GAN BHP Sensitivity analysis volatility.txt"
+    output_file_path = "W-GAN CBA LHS-1.txt"
 
     # Write the transposed data to the text file
-    with open(output_file_path, 'a') as file:
+    with open(output_file_path, 'w') as file:
         for row in results:
             file.write('\t'.join(str(entry) for entry in row) + '\n')
 

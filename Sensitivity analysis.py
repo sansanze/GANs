@@ -4,7 +4,7 @@ import pandas as pd
 import seaborn as sns
 
 # Get Data
-file_name = 'W-GAN BHP Sensitivity analysis maturity.txt'
+file_name = 'W-GAN BHP LHS-1.txt'
 df_results = pd.read_csv(file_name, delimiter='\t', header=None,
                              names=['Simulation', 'Type', 'Sort', 'MAPE', 'Market price', 'Strike Price',
                                     'Time to Maturity', 'Estimated Price', 'Starting Price', 'Implied volatility', 'Computational Time'])
